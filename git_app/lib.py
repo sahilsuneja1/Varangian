@@ -21,6 +21,7 @@ from typing import Dict, Optional, List, NamedTuple, Tuple
 import re
 import logging
 import os
+import redis_client
 
 from ogr.services.base import BaseGitService, BaseGitProject
 from ogr.abstract import IssueStatus, Issue
@@ -287,6 +288,42 @@ def _aggregate_bugs(predictions_file_name: str, closed_issue_bug_ids: set) -> Li
     return to_ret
 
 
+def _remove_FPs(repo, aggregated_bug_list, redis_server_IP):
+    if not redis_server_IP:
+        return aggregated_bug_list
+
+    rc = RedisClient(serverIP=redis_server_IP)
+    if not rc.redis_client:
+        return aggregated_bug_list
+
+    db_key = repo + '_FP'
+    FP_bugs_dict = redis_client.get_json(db_key)
+    if not FP_bugs_dict:
+        return aggregated_bug_list
+    
+    '''
+    FP_bugs_dict example: 
+        {'bug_hash_1': {'commit_id':'deadbeef', 
+                        'bug_report': 'bug_report_compressed_blob',
+                        'metadata': { 'reason': 'xxx',
+                                      'user_id': 'xxx',
+                                      'issue_id': 123,
+                                      'model_id': 'voting-soft'
+                                    } 
+                       },
+          'bug_hash_2': {...}
+        }
+    '''
+    
+    FP_bug_ids = FP_bugs_dict.keys()
+    for bug in aggregated_bug_list:
+        if bug.bug_id in FP_bug_ids:
+            aggregated_bug_list.remove(bug)
+    
+    return aggregated_bug_list
+
+    
+
 def run(
     repo: str,
     predictions_file: str,
@@ -296,6 +333,7 @@ def run(
     trace_preview_length: int = 5,
     service_dict: Optional[Dict[str, str]] = None,
     commit_hash: Optional[str] = None,
+    redis_server_IP: Optional[str] = None,
 ) -> None:
     """Take output from Varangian application and apply it to issues on git forges."""
     if service_dict is not None:
@@ -307,6 +345,7 @@ def run(
 
     closed_issue_bug_ids = _get_all_closed_bug_ids(project)
     aggregated_bug_list = _aggregate_bugs(predictions_file, closed_issue_bug_ids)
+    aggregated_bug_list = _remove_FPs(repo, aggregated_bug_list, redis_server_IP)
     to_update = _close_issues4bugs_not_in_results(project, predictions_file, aggregated_bug_list)
     _injest_results_and_create_issues(
         ogr_project=project,
