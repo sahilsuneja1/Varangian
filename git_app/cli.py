@@ -83,6 +83,12 @@ def _json_callback(ctx, param, value):
     type=str,
     help="Specific commit for which the augmented static analyzer was run.",
 )
+@click.option(
+    "--db-IP",
+    envvar="VARANGIAN_DB_IP",
+    type=str,
+    help="URL/IPaddr of the backed DB storing FP/TP info.",
+)
 def cli(
     namespace,
     repo,
@@ -92,6 +98,7 @@ def cli(
     trace_preview_length,
     service_dict,
     commit_hash,
+    db_IP
 ):
     """Run base command for varangian git forge application."""
     lib.run(
@@ -103,6 +110,7 @@ def cli(
         trace_preview_length=trace_preview_length,
         service_dict=service_dict,
         commit_hash=commit_hash,
+        db_IP=db_IP
     )
 
 
